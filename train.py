@@ -46,8 +46,8 @@ class EmotionCNN(nn.Module):
     def __init__(self, num_classes=NUM_CLASSES, pretrained=True):
         super(EmotionCNN, self).__init__()
 
-        weights = models.MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
-        self.model = models.mobilenet_v3_small(weights=weights)
+        weights = models.MobileNet_V3_Large_Weights.DEFAULT if pretrained else None
+        self.model = models.mobilenet_v3_large(weights=weights)
 
         # Replace the final classifier layer (layer 3)
         self.model.classifier[3] = nn.Linear(1024, num_classes)
@@ -169,7 +169,7 @@ def main():
     )
 
     print("Creating model...")
-    print("Using MobileNetV3-Small with pretrained weights")
+    print("Using MobileNetV3-Large with pretrained weights")
     model = EmotionCNN(num_classes=NUM_CLASSES, pretrained=True).to(device)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
