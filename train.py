@@ -54,10 +54,10 @@ class EmotionCNN(nn.Module):
         self.model.classifier = nn.Sequential(
             nn.Linear(960, 1280),
             nn.Hardswish(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.5),
             nn.Linear(1280, 512),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.2),
+            nn.Dropout(0.4),
             nn.Linear(512, num_classes),
         )
 
@@ -141,11 +141,9 @@ def main():
         [
             transforms.Resize((IMG_SIZE, IMG_SIZE)),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(15),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+            transforms.RandomRotation(10),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1),
             transforms.ToTensor(),
-            transforms.RandomErasing(p=0.2),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
             ),
@@ -186,13 +184,10 @@ def main():
     model = EmotionCNN(num_classes=NUM_CLASSES, pretrained=True).to(device)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    # Label smoothing for better generalization
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    # Use AdamW with weight decay for better regularization
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.05)
 
-    # Cosine annealing scheduler for better convergence
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, T_0=5, T_mult=2, eta_min=1e-6
     )
@@ -200,6 +195,8 @@ def main():
     train_losses, val_losses = [], []
     train_accs, val_accs = [], []
     best_val_acc = 0.0
+    patience = 4
+    patience_counter = 0
 
     print("\nStarting training...")
     for epoch in range(NUM_EPOCHS):
@@ -224,6 +221,7 @@ def main():
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
+            patience_counter = 0
             torch.save(
                 {
                     "epoch": epoch,
@@ -234,6 +232,12 @@ def main():
                 "best_model.pth",
             )
             print(f"Best model saved with validation accuracy: {val_acc:.2f}%")
+        else:
+            patience_counter += 1
+            print(f"No improvement. Patience: {patience_counter}/{patience}")
+            if patience_counter >= patience:
+                print(f"\nEarly stopping triggered after {epoch + 1} epochs")
+                break
 
     # Save training history
     print("\nSaving training history...")
