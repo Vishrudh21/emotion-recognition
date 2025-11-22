@@ -49,8 +49,17 @@ class EmotionCNN(nn.Module):
         weights = models.MobileNet_V3_Large_Weights.DEFAULT if pretrained else None
         self.model = models.mobilenet_v3_large(weights=weights)
 
-        # Replace the final classifier layer (layer 3)
-        self.model.classifier[3] = nn.Linear(1024, num_classes)
+        # Replace classifier with enhanced head
+        # MobileNetV3-Large has 960 input features to classifier
+        self.model.classifier = nn.Sequential(
+            nn.Linear(960, 1280),
+            nn.Hardswish(),
+            nn.Dropout(0.3),
+            nn.Linear(1280, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(512, num_classes),
+        )
 
     def forward(self, x):
         return self.model(x)
@@ -121,7 +130,7 @@ def main():
     torch.manual_seed(42)
 
     BATCH_SIZE = 64
-    NUM_EPOCHS = 20
+    NUM_EPOCHS = 30
     LEARNING_RATE = 0.001
     IMG_SIZE = 224
 
@@ -131,7 +140,11 @@ def main():
     train_transform = transforms.Compose(
         [
             transforms.Resize((IMG_SIZE, IMG_SIZE)),
-            transforms.RandomHorizontalFlip(),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(15),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+            transforms.RandomErasing(p=0.2),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
@@ -173,10 +186,15 @@ def main():
     model = EmotionCNN(num_classes=NUM_CLASSES, pretrained=True).to(device)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=3
+    # Label smoothing for better generalization
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+
+    # Use AdamW with weight decay for better regularization
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
+
+    # Cosine annealing scheduler for better convergence
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=5, T_mult=2, eta_min=1e-6
     )
 
     train_losses, val_losses = [], []
@@ -194,7 +212,7 @@ def main():
 
         val_loss, val_acc = validate(model, test_loader, criterion, device)
 
-        scheduler.step(val_loss)
+        scheduler.step()
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
