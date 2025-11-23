@@ -171,7 +171,7 @@ def main():
 
     BATCH_SIZE = 64
     NUM_EPOCHS = 30
-    LEARNING_RATE = 0.0005
+    LEARNING_RATE = 0.001
     IMG_SIZE = 224
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -250,7 +250,7 @@ def main():
         print("-" * 50)
 
         train_loss, train_acc = train_epoch(
-            model, train_loader, criterion, optimizer, device, use_mixup=True
+            model, train_loader, criterion, optimizer, device, use_mixup=False
         )
 
         val_loss, val_acc = validate(model, test_loader, criterion, device)
